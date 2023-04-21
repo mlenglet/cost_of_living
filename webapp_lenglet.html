@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+
+<!-- Load d3.js -->
+<script src="https://d3js.org/d3.v4.js"></script>
+
+
+<h2 style="font-family:sans-serif;text-align:center">Q1 - Analyze the development of cost-of-living in London over time. Are there any detectable trends?</h2>
+
+<label style="font-family:sans-serif;font-size:14px;top:135px;left:850px;position:relative">Opinion surveyed : </label>
+<select name="languages" id="lang" onmouseleave="update(value)" style="top:135px;left:850px;position:relative">
+    <option value="Increased a lot" onclick="update('Increased a lot')">Increased a lot</option>
+    <option value="Increased a little" onclick="update('Increased a little')">Increased a little</option>
+    <option value="Stayed the same">Stayed the same</option>
+    <option value="Decreased a little">Decreased a little</option>
+    <option value="Decreased a lot">Decreased a lot</option>
+    <option value="Don't know">Don't know</option>
+</select>
+
+<!-- Create a div where the graph will take place -->
+<div id="my_dataviz"></div>
+
+<!-- Circle are black when hovered-->
+<style>
+    .myCircle:hover {
+        stroke: #42DDC9;
+    }
+</style>
+
+
+
+
+<script>
+
+    /* For my implementation, I used 3 pieces of code from the D3.js Graph Gallery webiste.
+    *
+    * First code : "Stacked barplot with tooltip" : https://d3-graph-gallery.com/graph/barplot_stacked_hover.html
+    *
+    * Second code : "Button to change input data in barplot - .csv version" : https://d3-graph-gallery.com/graph/barplot_button_data_csv.html
+    *
+    * Third code : "A connected scatter plot with tooltip" : https://d3-graph-gallery.com/graph/connectedscatter_tooltip.html
+    *
+    *
+    *
+    * */
+
+
+
+
+
+
+
+    // set the dimensions and margins of the graph
+    var margin = {top: 100, right: 20, bottom: 60, left: 100},
+        width = 700 - margin.left - margin.right,
+        height = 580 - margin.top - margin.bottom;
+
+    // append the svg object to the body of the page
+    var svg = d3.select("#my_dataviz")
+        .append("svg")
+        .attr("width", width + margin.left + margin.right+100)
+        .attr("height", height + margin.top + margin.bottom)
+        .attr("display", "inline-flex")
+        .append("g")
+        .attr("transform",
+            "translate(" + margin.left + "," + margin.top + ")");
+
+
+
+    // Parse the Data
+    //d3.csv("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/data_stacked.csv", function(data) {
+    d3.csv("data/survey_gla.csv", function(data) {
+
+        // List of subgroups = header of the csv files = soil condition here
+        var subgroups = data.columns.slice(1)
+
+        // List of groups = species here = value of the first column called group -> I show them on the X axis
+        var groups = d3.map(data, function(d){return(d.group)}).keys()
+
+        // Add X axis
+        var x = d3.scaleBand()
+            .domain(groups)
+            .range([0, width-100])
+            .padding([0.2])
+        svg.append("g")
+            .attr("transform", "translate(0," + height + ")")
+            .call(d3.axisBottom(x).tickSizeOuter(0));
+
+
+        // Add Y axis
+        var y = d3.scaleLinear()
+            .domain([0, 100])
+            .range([ height, 0 ]);
+        svg.append("g")
+            .call(d3.axisLeft(y));
+
+        // Add X axis label:
+        svg.append("text")
+            .attr("text-anchor", "end")
+            .attr("x", width-100)
+            .attr("y", height+35)
+            .style("font-family", "sans-serif")
+            //.attr("y", height + margin.top + 20)
+            .text("Category of the costs surveyed")
+            .style("font-size", "14px");
+
+        // Y axis label:
+        svg.append("text")
+            .attr("text-anchor", "end")
+            .attr("transform", "rotate(-90)")
+            .attr("y", -40)
+            .attr("x", 0)
+            .style("font-family", "sans-serif")
+            .text("Percentages of Londoners (%)")
+            .style("font-size", "14px");
+
+        // color palette = one color per subgroup
+        var list_color = ['#d7191c','#fdae61','#ffffbf','#abd9e9','#2c7bb6','#E6EAE9']
+        var color = d3.scaleOrdinal()
+            .domain(subgroups)
+            .range(list_color)
+
+        // Normalize the data -> sum of each group must be 100!
+        console.log(data)
+        dataNormalized = []
+        data.forEach(function(d){
+            // Compute the total
+            tot = 0
+            for (i in subgroups){ name=subgroups[i] ; tot += +d[name] }
+            // Now normalize
+            for (i in subgroups){ name=subgroups[i] ; d[name] = d[name] / tot * 100}
+        })
+
+        //stack the data? --> stack per subgroup
+        var stackedData = d3.stack()
+            .keys(subgroups)
+            (data)
+
+        // ----------------
+        // Create a tooltip
+        // ---------------
+        var tooltip = d3.select("#my_dataviz")
+            .append("div")
+            .style("opacity", 0)
+            .attr("class", "tooltip")
+            .style("background-color", "#D6FFFF")
+            .style("border", "solid")
+            .style("border-width", "1px")
+            .style("border-radius", "5px")
+            .style("padding", "10px")
+            .style("width", "120px")
+            .style("position", "absolute")
+            .style("font-family", "sans-serif")
+
+        // Three function that change the tooltip when user hover / move / leave a cell
+        var mouseover = function(d) {
+            var subgroupName = d3.select(this.parentNode).datum().key;
+            var subgroupValue = d.data[subgroupName];
+            tooltip
+                .html(subgroupName + ": " +  Math.round(subgroupValue) + " %")
+                .style("opacity", 1)
+        }
+
+        var mousemove = function(d) {
+            tooltip
+                .style("left", (d3.mouse(this)[0]+90) + "px") // It is important to put the +90: other wise the tooltip is exactly where the point is an it creates a weird effect
+                .style("top", (d3.mouse(this)[1]+100) + "px")
+        }
+
+        var mouseleave = function(d) {
+            tooltip
+                .style("opacity", 0)
+        }
+
+        // Show the bars
+        svg.append("g")
+            .selectAll("g")
+            // Enter in the stack data = loop key per key = group per group
+            .data(stackedData)
+            .enter().append("g")
+            .attr("fill", function(d) { return color(d.key); })
+            .selectAll("rect")
+            // enter a second time = loop subgroup per subgroup to add all rectangles
+            .data(function(d) { return d; })
+            .enter().append("rect")
+            .attr("x", function(d) { return x(d.data.group); })
+            .attr("y", function(d) { return y(d[1]); })
+            .attr("height", function(d) { return y(d[0]) - y(d[1]); })
+            .attr("width",x.bandwidth())
+            .attr("stroke", "grey")
+            .on("mouseover", mouseover)
+            .on("mousemove", mousemove)
+            .on("mouseleave", mouseleave)
+
+
+
+        // Add legend
+        var legend = svg.append("g")
+            .attr("class", "legend")
+            .attr("transform", "translate(" + (width - 100) + "," + (0) + ")");
+
+        legend.selectAll("rect")
+            .data(subgroups)
+            .enter().append("rect")
+            .attr("x", 0)
+            .attr("y", function(d, i) { return i * 25; })
+            .attr("width", 15)
+            .attr("height", 15)
+            .style("fill", function(d) { return color(d); });
+
+        legend.selectAll("text")
+            .data(subgroups)
+            .enter().append("text")
+            .attr("x", 20)
+            .attr("y", function(d, i) { return i * 25 + 12; })
+            .text(function(d) { return d; })
+            .attr("text-anchor", "left")
+            .style("alignment-baseline", "middle")
+            .style("font-family", "sans-serif")
+            .style("font-size", "14px");
+    })
+
+
+
+
+    // Add title to svg chart
+    svg.append("text")
+        .attr("x", ((width-margin.left) / 2))
+        .attr("y", 0 - (margin.top / 2))
+        .attr("text-anchor", "middle")
+        .style("font-size", "15px")
+        .style("font-family", "sans-serif")
+        .style("text-decoration", "underline")
+        .text('Fig 1.1 : Overview of the survey among Londoners conducted by the G.L.A. (Jan 2022) :');
+
+    // Add title to svg chart
+    svg.append("text")
+        .attr("x", ((width-margin.left) / 2))
+        .attr("y", 0 - (margin.top / 2)+22)
+        .attr("text-anchor", "middle")
+        .style("font-size", "15px")
+        .style("font-family", "sans-serif")
+        //.style("text-decoration", "underline")
+        .text('How has the cost of living evolved over the last six months?');
+
+
+/*-------------------------------------------------------------------------------------------------------------------*/
+
+    // set the dimensions and margins of the graph
+    var margin2 = {top: 200, right: 30, bottom: 60, left: 60},
+        width2 = 620 - margin2.left - margin2.right,
+        height2 = 580 - margin2.top - margin2.bottom;
+
+    // append the svg object to the body of the page
+    var svg2 = d3.select("#my_dataviz")
+        .append("svg")
+        .attr("width", width2 + margin2.left + margin2.right)
+        .attr("height", height2 + margin2.top + margin2.bottom)
+        .attr("display", "inline-flex")
+        .append("g")
+        .attr("transform",
+            "translate(" + margin2.left + "," + margin2.top + ")");
+
+    // Initialize the X axis
+    var x = d3.scaleBand()
+        .range([ 0, width2 ])
+        .padding(0.2);
+    var xAxis = svg2.append("g")
+        .attr("transform", "translate(0," + height2 + ")")
+
+    // Initialize the Y axis
+    var y = d3.scaleLinear()
+        .range([ height2, 0]);
+    var yAxis = svg2.append("g")
+        .attr("class", "myYaxis")
+
+    // Add X axis label:
+    svg2.append("text")
+        .attr("text-anchor", "end")
+        .attr("x", width2)
+        .attr("y", height2+35)
+        //.attr("y", height + margin.top + 20)
+        .text("Category of the costs surveyed")
+        .style("font-family", "sans-serif")
+        .style("font-size", "14px");
+
+    // Y axis label:
+    svg2.append("text")
+        .attr("text-anchor", "end")
+        .attr("transform", "rotate(-90)")
+        .attr("y", -40)
+        .attr("x", 0)
+        .text("Percentages of Londoners (%)")
+        .style("font-family", "sans-serif")
+        .style("font-size", "14px");
+
+    // A function that create / update the plot for a given variable:
+    function update(selectedVar) {
+
+        // Parse the Data
+        d3.csv("data/survey_gla.csv", function(data) {
+
+            // X axis
+            x.domain(data.map(function(d) { return d.group; }))
+            xAxis.transition().duration(1000).call(d3.axisBottom(x))
+
+            // Add Y axis
+            y.domain([0, d3.max(data, function(d) { return +d[selectedVar] }) ]);
+            yAxis.transition().duration(1000).call(d3.axisLeft(y));
+
+
+
+            // variable u: map data to existing bars
+            var u = svg2.selectAll("rect")
+                .data(data)
+
+
+
+            // Adapt the colors
+            var list_color2 = ['#d7191c','#fdae61','#ffffbf','#abd9e9','#2c7bb6','#E6EAE9']
+
+            var  c = list_color2[0];
+            switch(selectedVar){
+                case 'Increased a lot':
+                    c = list_color2[0]
+                    break;
+                case 'Increased a little':
+                    c = list_color2[1]
+                    break;
+                case 'Stayed the same':
+                    c = list_color2[2]
+                    break;
+                case 'Decreased a little':
+                    c = list_color2[3]
+                    break;
+                case 'Decreased a lot':
+                    c = list_color2[4]
+                    break;
+                case 'Don\'t know':
+                    c = list_color2[5]
+                    break;
+                default:
+                    c = list_color2[0];
+            }
+
+
+
+            // update bars
+            u
+                .enter()
+                .append("rect")
+                .merge(u)
+                .transition()
+                .duration(1000)
+                .attr("x", function(d) { return x(d.group); })
+                .attr("y", function(d) { return y(d[selectedVar]); })
+                .attr("width", x.bandwidth())
+                .attr("height", function(d) { return height2 - y(d[selectedVar]); })
+                .attr("fill", c)
+                .attr("stroke", "grey")
+
+        })
+
+    }
+
+    // Initialize plot
+    update('Increased a lot')
+
+    // Add title to svg chart
+    svg2.append("text")
+        .attr("x", ((width2-margin2.left) / 2))
+        .attr("y", 0 - 150)
+        //.attr("y", 0)
+        .attr("text-anchor", "middle")
+        .style("font-size", "15px")
+        .style("font-family", "sans-serif")
+        .style("text-decoration", "underline")
+        .text('Fig 1.2 : Interactive histogram of Londoners\' responses to the G.L.A. survey (Jan 2022) :');
+
+    // Add title to svg chart
+    svg2.append("text")
+        .attr("x", ((width2-margin2.left) / 2))
+        .attr("y", 0 - 150+22)
+        .attr("text-anchor", "middle")
+        .style("font-size", "15px")
+        .style("font-family", "sans-serif")
+        //.style("text-decoration", "underline")
+        .text('How has the cost of living evolved over the last six months?');
+
+
+/*-------------------------------------------------------------------------------------------------------------------*/
+
+
+
+
+    // set the dimensions and margins of the graph
+    var margin3 = {top: 150, right: 30, bottom: 50, left: 100},
+        width3 = 800 - margin3.left - margin3.right,
+        height3 = 600 - margin3.top - margin3.bottom;
+
+    // append the svg object to the body of the page
+    var svg3 = d3.select("#my_dataviz")
+        .append("svg")
+        .attr("width", width3 + margin3.left + margin3.right)
+        .attr("height", height3 + margin3.top + margin3.bottom)
+        .append("g")
+        .attr("transform",
+            "translate(" + margin3.left + "," + margin3.top + ")");
+
+    //Read the data
+    d3.csv("data/cpi.csv",
+
+        // When reading the csv, I must format variables:
+        function(d){
+            return { date : d3.timeParse("%Y-%m-%d")(d.date), value : d.value }
+        },
+
+        // Now I can use this dataset:
+        function(data) {
+
+            // Add X axis --> it is a date format
+            var x = d3.scaleTime()
+                .domain(d3.extent(data, function(d) { return d.date; }))
+                .range([ 0, width3 ]);
+            svg3.append("g")
+                .attr("transform", "translate(0," + height3 + ")")
+                .call(d3.axisBottom(x));
+
+
+
+            // Add Y axis
+            var y = d3.scaleLinear()
+                .domain( [0, 120])
+                .range([ height3, 0 ]);
+            svg3.append("g")
+                .call(d3.axisLeft(y));
+
+
+            // Add X axis label:
+            svg3.append("text")
+                .attr("text-anchor", "end")
+                .attr("x", width3)
+                .attr("y", height3+35)
+                //.attr("y", height + margin.top + 20)
+                .text("Time")
+                .style("font-family", "sans-serif")
+                .style("font-size", "14px");
+
+            // Y axis label:
+            svg3.append("text")
+                .attr("text-anchor", "end")
+                .attr("transform", "rotate(-90)")
+                .attr("y", -35)
+                .attr("x", 0)
+                .text("Consumer Price Inflation (CPI)")
+                .style("font-family", "sans-serif")
+                .style("font-size", "14px");
+
+
+
+
+            // Add the line
+            svg3.append("path")
+                .datum(data)
+                .attr("fill", "none")
+                .attr("stroke", "#426CC9")
+                .attr("stroke-width", 1.5)
+                .attr("d", d3.line()
+                    .curve(d3.curveBasis) // Just add that to have a curve instead of segments
+                    .x(function(d) { return x(d.date) })
+                    .y(function(d) { return y(d.value) })
+                )
+
+            // create a tooltip
+            var tooltip3 = d3.select("#my_dataviz")
+                .append("div")
+                .style("opacity", 0)
+                .attr("class", "tooltip3")
+                .style("background-color", "#D6FFFF")
+                .style("border", "solid")
+                .style("border-width", "2px")
+                .style("border-radius", "5px")
+                .style("padding", "5px")
+                .style("position", "absolute")
+                .style("font-family", "sans-serif")
+
+
+            // Add the points
+            svg3
+                .append("g")
+                .selectAll("dot")
+                .data(data)
+                .enter()
+                .append("circle")
+                .attr("class", "myCircle")
+                .attr("cx", function(d) { return x(d.date) } )
+                .attr("cy", function(d) { return y(d.value) } )
+                .attr("r", 4)
+                .attr("stroke", "#426CC9")
+                .attr("stroke-width", 3)
+                .attr("fill", "white")
+                .on("mouseover", function(d) {
+                    tooltip3.transition()
+                        .duration(200)
+                        .style("opacity", 1);
+                    const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+                    tooltip3.html(months[d.date.getMonth()] + " " + d.date.getFullYear() + " : CPI is " + d.value)
+                        .style("left", (d3.event.pageX ) + "px")
+                        .style("top", (d3.event.pageY +20) + "px");
+                })
+                .on("mouseout", function(d) {
+                    tooltip3.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                });
+
+            // Add title to svg chart
+            svg3.append("text")
+                .attr("x", ((width3-margin3.left) / 2))
+                .attr("y", 0 - (margin3.top / 3))
+                //.attr("y", 0)
+                .attr("text-anchor", "middle")
+                .style("font-size", "15px")
+                .style("font-family", "sans-serif")
+                .style("text-decoration", "underline")
+                .text('Fig 1.3 : Evolution of the Consumer Price Index in the UK over Time (from July 2021 to February 2023) :');
+
+
+
+        })
+
+
+
+</script>
+
+<br><br><br>
+<h2>Data sources : </h2>
+
+<p>
+        [1]     Dataset from the online survey conducted by YouGov for the Greater
+        London Authority between January 21 and 26, 2022 called ”The rising
+        cost of living and its effects on Londoners”.
+    <br>
+
+
+    <br>
+    [2]     Office for National Statistics Dataset published in March 2023 March
+        2023 and entitled ”Consumer price inflation, UK: March 2023”. <br>
+
+
+</p>
+
+
+<br><br><br>
+<h2>Data processing : </h2>
+
+<p>The data in the first dataset provided by KCL has not been changed.
+
+    <br><br>
+
+    The data in the 2nd dataset, however, have been modified.
+    The so-called "base year" for the CPI is the year used as the reference point for the index calculation.
+    as the reference point for the calculation of the index. The Office for National Statistics dataset
+    Office for National Statistics initially chose the base year of 2015, i.e., it is assumed that in 2015 the CPI was equal to 100 in 2015.
+
+    Here we are interested in the evolution of the CPI in UK since January 2021. So it would be more interesting to set the base year to 2021. So I decided to process the data so that the base year is 2021 (January), i.e. the CPI in the UK in January 2021 was equal to 100.
+
+
+</p>
+
+
